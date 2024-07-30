@@ -1,67 +1,51 @@
-pipeline{
+pipeline {
 
-parameters{
-    booleanParam(name: autoapprove, defaultValue: false, description:"apply the changes once the plan completed?")
-}
+    parameters {
+        booleanParam(name: 'autoapprove', defaultValue: false, description: "apply the changes once the plan completed?")
+    }
 
-environment{
+    environment {
+        secret_Key = credentials("secret_key_ID")
+        access_Key = credentials("access_key_ID")
+    }
 
-    secret_Key   = crendentials("secret_key_ID")
-    access_Key   = crendentials("access_key_ID")
-}
+    agent any
 
-agent any
+    stages {
 
+        stage("Checkout the terraform config") {
+            steps {
+                git url: 'https://github.com/thallurn88/Terraform-Jenkins.git'
+            }
+        }
 
-stages{
+        stage("Plan") {
+            steps {
+                sh 'terraform init'
+                sh 'terraform plan -out tfplan'
+                sh 'terraform show -no-color tfplan > tfplan.txt'
+            }
+        }
 
- stage("Checkout the terraform config"){
-   steps{
-    git https://github.com/thallurn88/Terraform-Jenkins.git
-   }
-  }
+        stage("Approve") {
+            when {
+                not {
+                    equals expected: true, actual: params.autoapprove
+                }
+            }
+            steps {
+                script {
+                    def plan = readFile 'tfplan.txt'
+                    input message: "Do you want to apply the changes?",
+                          parameters: [text(name: 'plan', defaultValue: plan, description: "Please review the plan")]
+                }
+            }
+        }
 
-
-
-
-stage("Plan"){
-   steps{
-    sh 'terrform init'
-    sh 'terrform plan -out tfplan'
-    sh 'terrform show -no-colour tfplan > tfplan.txt'
-   }
-}
-
-
-
-stage("Approve"){
-    when{
-        not{
-            equals expected: true, actual: params.autoapprove
+        stage("Apply") {
+            steps {
+                sh "terraform apply -input=false tfplan"
+            }
         }
     }
-   steps{
-    scripts{
-        def plan = readFile tfplan.txt
-        input message: "do you want apply the changes?"
-        parameters: [text(name: plan , defaultValue: plan, decription: "Please review the plan")]
-    }
-   }
-}
-
-
-
-
-stage("Apply"){
-   steps{
-
-    sh "terraform apply -input=false tfplan"
-
-   }
-}
-
-
-
-
-}
 }
